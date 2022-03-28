@@ -9,6 +9,8 @@ const bcrypt = require('bcryptjs'); //=> https://www.npmjs.com/package/bcryptjs
 const CryptoJS = require("crypto-js"); //=> https://www.npmjs.com/package/crypto-js
 const cookieParser = require('cookie-parser'); //=> https://www.npmjs.com/package/cookie-parser
 const jwt = require('jsonwebtoken'); //=> https://www.npmjs.com/package/jsonwebtoken
+const fetch = require("node-fetch"); // => https://www.npmjs.com/package/node-fetch
+const { devNull } = require('os');
 
 /* Server classe */
 
@@ -63,6 +65,20 @@ class ServerClass {
             
         });
     }
+
+    async moviedatabase(url){
+    try{
+        var data = await fetch('https://api.themoviedb.org/3/' + url);
+        var json = await data.json();
+        if(json.success == false){
+            return null;
+        }
+    }catch(err){
+        return false;
+    }
+    return json;
+    }
+
 
     // Method to initiate server
     init(){
@@ -426,10 +442,7 @@ class ServerClass {
                         data: null,
                     })
                 }})
-
         })
-
-
         //############################################################
         //# +------------------------------------------------------+ #
         //# |                      bookmark                        | #
@@ -506,8 +519,159 @@ class ServerClass {
                         data: null,
                     })
                 }})
-            
+        })
 
+        //############################################################
+        //# +------------------------------------------------------+ #
+        //# |                        Movie                         | #
+        //# +------------------------------------------------------+ #
+        //############################################################
+        
+        this.app.get('/api/movie/:id/info', async ( req, res ) => {
+            // Get data movie
+            this.verifytoken(req, async (result) =>{
+                if(result){
+                    var detailmovie = await this.moviedatabase(`movie/${req.params.id}?api_key=${process.env.TMDB_TOKEN}&language=fr-FR`);
+                    
+                    //if service of MovieDataBase not work
+                    if(detailmovie == false){
+                        return res.status(503).json({ 
+                            msg: 'Service Unavailable',
+                            error: null,
+                            data: null,
+                        })
+                    }
+                    
+                    var creditsmovie = await this.moviedatabase(`movie/${req.params.id}/credits?api_key=${process.env.TMDB_TOKEN}&language=fr-FR`);
+                    var watchflatratemovie = await this.moviedatabase(`movie/${req.params.id}/watch/providers?api_key=${process.env.TMDB_TOKEN}&language=fr-FR`);
+                    var director = null;
+                    var flatrate = null;
+
+                    //get director in credit if exisit
+                    try{
+                    for (const key in creditsmovie.crew) {
+                        if(creditsmovie.crew[key].job === "Director"){
+                            director = creditsmovie.crew[key].name;
+                            break;
+                        }
+                    }
+                    }catch{
+                        director = null;
+                    }
+                    
+                    //add flatrate if exisit
+                    try{
+                        flatrate = watchflatratemovie.results.FR.flatrate;
+                    }catch(err){
+                        flatrate = null;
+                    }
+                    
+                    
+                    if(detailmovie && flatrate && director){
+                        return res.status(200).json({ 
+                            msg: 'OK',
+                            error: null,
+                            data: {
+                                title: detailmovie.title,
+                                genres: detailmovie.genres,
+                                overview: detailmovie.overview,
+                                poster_path: detailmovie.poster_path,
+                                release_date: detailmovie.release_date,
+                                vote_average: detailmovie.vote_average,
+                                director: director,
+                                flatrate: flatrate
+                            },
+                        })
+                    }else{
+                        return res.status(404).json({ 
+                            msg: 'Not Found',
+                            error: null,
+                            data: null,
+                        })
+                    }
+
+                }else{
+                    return res.status(401).json({ 
+                        msg: 'Unauthorized',
+                        error: null,
+                        data: null,
+                    })
+                }})
+        })
+
+        this.app.get('/api/movie/:id/recommendations', async ( req, res ) => {
+            // Get Recommendation
+            this.verifytoken(req, async (result) =>{
+                if(result){
+                    var recommendations = await this.moviedatabase(`movie/${req.params.id}/recommendations?api_key=${process.env.TMDB_TOKEN}&language=fr-FR`);
+                    
+                    //if service of MovieDataBase not work
+                    if(recommendations == false){
+                        return res.status(503).json({ 
+                            msg: 'Service Unavailable',
+                            error: null,
+                            data: null,
+                        })
+                    }
+
+                    if(recommendations){
+                        return res.status(200).json({ 
+                            msg: 'OK',
+                            error: null,
+                            data: recommendations.results,
+                        })
+                    }else{
+                        return res.status(404).json({ 
+                            msg: 'Not Found',
+                            error: null,
+                            data: null,
+                        })
+                    }
+
+                }else{
+                    return res.status(401).json({ 
+                        msg: 'Unauthorized',
+                        error: null,
+                        data: null,
+                    })
+                }})
+        })
+
+        this.app.get('/api/movie/popular', async ( req, res ) => {
+            // Get popular
+            this.verifytoken(req, async (result) =>{
+                if(result){
+                    var popular = await this.moviedatabase(`movie/popular?api_key=${process.env.TMDB_TOKEN}&language=fr-FR`);
+                    //if service of MovieDataBase not work
+                    if(popular == false){
+                        return res.status(503).json({ 
+                            msg: 'Service Unavailable',
+                            error: null,
+                            data: null,
+                        })
+                    }
+
+                    if(popular){
+                        return res.status(200).json({ 
+                            msg: 'OK',
+                            error: null,
+                            data: popular.results,
+                        })
+                    }else{
+                        return res.status(404).json({ 
+                            msg: 'Not Found',
+                            error: null,
+                            data: null,
+                        })
+                    }
+
+            }else{
+                return res.status(401).json({ 
+                    msg: 'Unauthorized',
+                    error: null,
+                    data: null,
+                })
+            }})
         })
 
         this.launch();
