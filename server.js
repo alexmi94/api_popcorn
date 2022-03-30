@@ -10,17 +10,15 @@ const CryptoJS = require("crypto-js"); //=> https://www.npmjs.com/package/crypto
 const cookieParser = require('cookie-parser'); //=> https://www.npmjs.com/package/cookie-parser
 const jwt = require('jsonwebtoken'); //=> https://www.npmjs.com/package/jsonwebtoken
 const fetch = require("node-fetch"); // => https://www.npmjs.com/package/node-fetch
-const { devNull } = require('os');
-
+const cors = require('cors'); // => https://www.npmjs.com/package/node-fetch
 /* Server classe */
-
-
 
 class ServerClass {
     // Inject value into the classe
     constructor(){
         // Set server properties
         this.app = express();
+        this.app.use(cors())
         this.port = process.env.PORT;
 
         // Define server
@@ -107,8 +105,11 @@ class ServerClass {
     //# |                       Token                          | #
     //# +------------------------------------------------------+ #
     //############################################################
+    
+    
 
     this.app.get('/api/get_token', async ( req, res ) => {
+
         // Get token
 
             this.connection.query(`
@@ -180,6 +181,7 @@ class ServerClass {
         //############################################################
 
         this.app.get('/api/user/:id', ( req, res ) => {
+            res.set('access-control-allow-origin', '*')
             // Get user with id
             this.verifytoken(req, (result) =>{
                 if(result){
@@ -217,6 +219,7 @@ class ServerClass {
         })
 
         this.app.get('/api/user/:id/bookmark', ( req, res ) => {
+            res.set('access-control-allow-origin', '*');
             // Get the movie that the user has bookmarked with the id
             this.verifytoken(req, (result) =>{
                 if(result){
@@ -249,6 +252,7 @@ class ServerClass {
             })
         })
         
+
         this.app.post('/api/user', async ( req, res ) => {
             // Create user
 
@@ -347,7 +351,6 @@ class ServerClass {
 
         this.app.put('/api/user/:id/password', async ( req, res ) => {
             // Edit password of user
-
             this.verifytoken(req, async (result) =>{
                 if(result){
                 req.body.password = await bcrypt.hash(req.body.password, process.env.SERVER_HASH);
@@ -383,7 +386,6 @@ class ServerClass {
 
         this.app.put('/api/user/:id/address', async ( req, res ) => {
             // Edit address of user
-
             this.verifytoken(req, (result) =>{
                 if(result){
                     req.body.address = CryptoJS.AES.encrypt(req.body.alternate_name, process.env.SERVER_CRYPTO_SECRET).toString();
@@ -527,7 +529,7 @@ class ServerClass {
         //# +------------------------------------------------------+ #
         //############################################################
         
-        this.app.get('/api/movie/:id/info', async ( req, res ) => {
+        this.app.get('/api/movie/detail/:id', async ( req, res ) => {
             // Get data movie
             this.verifytoken(req, async (result) =>{
                 if(result){
@@ -599,7 +601,7 @@ class ServerClass {
                 }})
         })
 
-        this.app.get('/api/movie/:id/recommendations', async ( req, res ) => {
+        this.app.get('/api/movie/recommendations/:id', async ( req, res ) => {
             // Get Recommendation
             this.verifytoken(req, async (result) =>{
                 if(result){
@@ -637,41 +639,42 @@ class ServerClass {
                 }})
         })
 
-        this.app.get('/api/movie/popular', async ( req, res ) => {
-            // Get popular
-            this.verifytoken(req, async (result) =>{
-                if(result){
-                    var popular = await this.moviedatabase(`movie/popular?api_key=${process.env.TMDB_TOKEN}&language=fr-FR`);
-                    //if service of MovieDataBase not work
-                    if(popular == false){
-                        return res.status(503).json({ 
-                            msg: 'Service Unavailable',
-                            error: null,
-                            data: null,
-                        })
+        this.app.get('/api/movie/popular/:nb', async ( req, res ) => {
+            var nb = 0;
+            var film_liste = [];
+            var page = 1;
+            while(true){
+                var popular = await this.moviedatabase(`movie/popular?api_key=${process.env.TMDB_TOKEN}&language=fr-FR&page=${page}`);
+                if(popular == false){
+                    return res.status(503).json({ 
+                        msg: 'Service Unavailable',
+                        error: null,
+                        data: null,
+                    })
+                }
+                if(popular){
+                    for (const key in popular.results) {
+                        if(nb < req.params.nb){
+                            film_liste.push(popular.results[key])
+                            nb++;
+                        }else{
+                            return res.status(200).json({ 
+                                msg: 'OK',
+                                error: null,
+                                data: film_liste,
+                            })
+                        }
                     }
-
-                    if(popular){
-                        return res.status(200).json({ 
-                            msg: 'OK',
-                            error: null,
-                            data: popular.results,
-                        })
-                    }else{
-                        return res.status(404).json({ 
-                            msg: 'Not Found',
-                            error: null,
-                            data: null,
-                        })
-                    }
-
-            }else{
-                return res.status(401).json({ 
-                    msg: 'Unauthorized',
-                    error: null,
-                    data: null,
-                })
-            }})
+                }else{
+                    return res.status(404).json({ 
+                        msg: 'Not Found',
+                        error: null,
+                        data: null,
+                    })
+                }
+                page++;
+            }
+        
         })
 
         this.launch();
