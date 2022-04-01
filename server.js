@@ -10,7 +10,7 @@ const CryptoJS = require("crypto-js"); //=> https://www.npmjs.com/package/crypto
 const cookieParser = require('cookie-parser'); //=> https://www.npmjs.com/package/cookie-parser
 const jwt = require('jsonwebtoken'); //=> https://www.npmjs.com/package/jsonwebtoken
 const fetch = require("node-fetch"); // => https://www.npmjs.com/package/node-fetch
-const cors = require('cors'); // => https://www.npmjs.com/package/node-fetch
+const { generateKey } = require('crypto');
 /* Server classe */
 
 class ServerClass {
@@ -18,7 +18,7 @@ class ServerClass {
     constructor(){
         // Set server properties
         this.app = express();
-        this.app.use(cors())
+        //this.app.use(cors())
         this.port = process.env.PORT;
 
         // Define server
@@ -32,6 +32,24 @@ class ServerClass {
             //password: process.env.DB_PWD,
             database: process.env.DB_NAME
         })
+
+        this.app.use( (request, response, next) => {
+            /* 
+                [SECURITY] CORS
+                Define allowed access
+            */
+                response.setHeader('Access-Control-Allow-Origin', "*")
+                response.header('Access-Control-Allow-Credentials', true);
+                response.header('Access-Control-Allow-Methods', this.allowedMethods);
+                response.header('Access-Control-Allow-Headers', 'Authorization, Origin, X-Requested-With, Content-Type, Accept');
+            //
+                if(request.method === 'OPTIONS'){ response.sendStatus(200) }
+                else{
+                    next();
+                }
+            //
+        })
+
     }
     verifytoken(req, callback){
         const cookies = req.cookies["popcorn-token"]
@@ -97,6 +115,22 @@ class ServerClass {
         this.bindRoutes();
     }
 
+    //Generate Token
+
+    generatetoken(id, email, password){
+        let userToken = jwt.sign(
+            { 
+                id: id,
+                email: email,
+                password: password
+            }, 
+            process.env.SERVER_JWT_SECRET
+        );
+        
+        return CryptoJS.AES.encrypt( userToken, process.env.SERVER_CRYPTO_SECRET ).toString();
+    
+    }
+
     // Method to define serveur routes
     bindRoutes(){
 
@@ -106,10 +140,10 @@ class ServerClass {
     //# +------------------------------------------------------+ #
     //############################################################
     
+
     
 
-    this.app.get('/api/get_token', async ( req, res ) => {
-
+    this.app.post('/api/get_token', async ( req, res ) => {
         // Get token
 
             this.connection.query(`
@@ -143,17 +177,7 @@ class ServerClass {
                 );
 
                 if(validatedPassword){
-                    //generate token
-                    let userToken = jwt.sign(
-                        { 
-                            id: results[0].id,
-                            email: results[0].email,
-                            password: results[0].password
-                        }, 
-                        process.env.SERVER_JWT_SECRET
-                    );
-                    
-                    userToken = CryptoJS.AES.encrypt( userToken, process.env.SERVER_CRYPTO_SECRET ).toString();
+                    let userToken = this.generatetoken(results[0].id, results[0].email, results[0].password)
 
                     res.cookie('popcorn-token', userToken, { maxAge: 700000, httpOnly: true });
 
@@ -179,44 +203,6 @@ class ServerClass {
         //# |                        User                          | #
         //# +------------------------------------------------------+ #
         //############################################################
-
-        this.app.get('/api/user/:id', ( req, res ) => {
-            res.set('access-control-allow-origin', '*')
-            // Get user with id
-            this.verifytoken(req, (result) =>{
-                if(result){
-                    this.connection.query(`
-                    SELECT * FROM user WHERE id = ${req.params.id}
-                    `, 
-                    (mysqlError, results) => {
-                        if( mysqlError ){
-                            return res.status(502).json({ 
-                                msg: 'Bad Gateway ou Proxy Error: MySQL',
-                                error: mysqlError,
-                                data: null,
-                            })
-                        }
-                        else{
-                            //Decrypt alternate_name and address
-                            results[0].alternate_name = CryptoJS.AES.decrypt(results[0].alternate_name, process.env.SERVER_CRYPTO_SECRET).toString(CryptoJS.enc.Utf8);
-                            results[0].address = CryptoJS.AES.decrypt(results[0].address, process.env.SERVER_CRYPTO_SECRET).toString(CryptoJS.enc.Utf8);
-                            
-                            return res.status(200).json({ 
-                                msg: 'OK',
-                                error: null,
-                                data: results,
-                            })
-                        }
-                    });
-                }else{
-                    return res.status(401).json({ 
-                        msg: 'Unauthorized',
-                        error: null,
-                        data: null,
-                    })
-                }
-            })                
-        })
 
         this.app.get('/api/user/:id/bookmark', ( req, res ) => {
             res.set('access-control-allow-origin', '*');
