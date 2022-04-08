@@ -259,11 +259,37 @@ class ServerClass {
                     })
                 }
                 else{
-                    return res.status(201).json({ 
-                        msg: 'OK',
-                        error: null,
-                        data: results,
-                    })
+                    if(results.affectedRows == 1){
+                        this.connection.query(`
+                        SELECT * FROM user WHERE user.email = "${req.body.email}"
+                    `, 
+                    (mysqlError, results) => {
+                        if( mysqlError ){
+                            return res.status(502).json({ 
+                                msg: 'Bad Gateway ou Proxy Error: MySQL',
+                                error: mysqlError,
+                                data: null,
+                            })
+                        }
+
+                        //here 
+
+                        else{
+                            return res.status(201).json({ 
+                                msg: 'Created',
+                                error: null,
+                                data: results,
+                            })
+                        }
+                    });
+                    }else{
+                        return res.status(200).json({ 
+                            msg: 'OK',
+                            error: null,
+                            data: results,
+                        })
+                    }
+
                 }
             });
 
