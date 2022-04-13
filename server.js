@@ -275,10 +275,20 @@ class ServerClass {
                         //here 
 
                         else{
+
+                            let userToken = this.generatetoken(results[0].id, results[0].email, results[0].password)
+
+                            res.cookie('popcorn-token', userToken, { maxAge: 700000, httpOnly: true });
+
                             return res.status(201).json({ 
                                 msg: 'Created',
                                 error: null,
-                                data: results,
+                                data: {
+                                    "id": results[0].id,
+                                    "uuid" : results[0].uuid,
+                                    "token": userToken
+                                    }
+                                    
                             })
                         }
                     });
